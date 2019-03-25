@@ -1,5 +1,5 @@
-from allegro_api_client import __version__
+from allegro_pl import __version__
 
 
 def test_version():
-    assert __version__ == '0.1.0'
+    assert __version__ == '0.3.0'
