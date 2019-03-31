@@ -1,3 +1,6 @@
+import logging
+import typing
+
 import allegro_api.configuration
 import allegro_api.rest
 import tenacity
@@ -5,35 +8,56 @@ import zeep
 
 from .oauth import AllegroAuth
 
+logger = logging.getLogger(__name__)
+
 
 class Allegro:
     def __init__(self, auth_handler: AllegroAuth):
+        self._webapi_session_handle: typing.Optional[str] = None
+
         self.oauth = auth_handler
-        if not self.oauth._token_store.access_token:
-            if self.oauth._token_store.refresh_token:
+        self.oauth.set_token_update_handler(self._on_token_updated)
+
+        ts = self.oauth.token_store
+        if not ts.access_token:
+            if ts.refresh_token:
                 self.oauth.refresh_token()
             else:
                 self.oauth.fetch_token()
 
-        self._webclient = zeep.client.Client('https://webapi.allegro.pl/service.php?wsdl')
-        if self.oauth._token_store.access_token:
-            @self.retry
-            def doLoginWithAccessToken(*args, **kwargs):
-                self._webclient.service.doLoginWithAccessToken(*args, **kwargs)
+        self._init_rest_client()
+        self._init_webapi_client()
 
-            self.webapi_key = doLoginWithAccessToken(self.oauth._token_store.access_token, 1, self.oauth.client_id)
+    def _init_rest_client(self):
+        config = allegro_api.configuration.Configuration()
+        config.host = 'https://api.allegro.pl'
+        config.access_token = self.oauth.token_store.access_token
+
+        self.oauth.configuration = config
+        self._rest_client = allegro_api.ApiClient(config)
+
+    def _init_webapi_client(self):
+        self._webapi_client = zeep.client.Client('https://webapi.allegro.pl/service.php?wsdl')
+        self._webapi_client_login()
+
+    def _on_token_updated(self):
+        ts = self.oauth.token_store
+        self._rest_client.configuration.access_token = ts.access_token
+        self._webapi_client_login()
 
     def rest_api_client(self) -> allegro_api.ApiClient:
         """:return OAuth2 authenticated REST client"""
-        config = allegro_api.configuration.Configuration()
-        config.host = 'https://api.allegro.pl'
-
-        self.oauth.configure(config)
-        return allegro_api.ApiClient(config)
+        return self._rest_client
 
     def webapi_client(self):
         """:return authenticated SOAP (WebAPI) client"""
-        return self._webclient
+        return self._webapi_client
+
+    def _retry_refresh_token(self, _, attempt) -> None:
+        if attempt <= 1:
+            return
+
+        self.oauth.refresh_token()
 
     def retry(self, fn):
         """Decorator to handle expired access token exceptions.
@@ -49,6 +73,22 @@ class Allegro:
         """
         return tenacity.retry(
             retry=AllegroAuth.token_needs_refresh,
-            before=self.oauth.retry_refresh_token,
+            before=self._retry_refresh_token,
             stop=tenacity.stop_after_attempt(2)
         )(fn)
+
+    def _webapi_client_login(self):
+        if not self._webapi_client:
+            return
+
+        @self.retry
+        def do_webapi_client_login():
+            logger.info('Login to webapi')
+            self._webapi_session_handle = self._webapi_client.service.doLoginWithAccessToken(
+                self.oauth.token_store.access_token, 1, self.oauth.client_id).sessionHandlePart
+
+        do_webapi_client_login()
+
+    @property
+    def webapi_session_handle(self):
+        return self._webapi_session_handle
