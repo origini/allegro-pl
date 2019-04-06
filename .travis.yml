@@ -10,11 +10,10 @@ install:
 script:
 - pytest
 before_deploy:
-- poetry build
 - poetry config http-basic.pypi $PYPI_USER $PYPI_PASSWORD
 deploy:
   provider: script
-  script: poetry publish
+  script: poetry publish --build
   on:
     tags: true
     branch: master
