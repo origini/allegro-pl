@@ -96,8 +96,8 @@ class AllegroAuth:
         return self._token_store
 
     @staticmethod
-    def token_needs_refresh(f: concurrent.futures.Future) -> bool:
-        x = f.exception(0)
+    def token_needs_refresh(retry_state) -> bool:
+        x = retry_state.outcome.exception(0)
         if x is None:
             return False
         if isinstance(x, allegro_api.rest.ApiException) and x.status == 401:

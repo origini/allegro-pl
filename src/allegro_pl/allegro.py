@@ -53,8 +53,8 @@ class Allegro:
         """:return authenticated SOAP (WebAPI) client"""
         return self._webapi_client
 
-    def _retry_refresh_token(self, _, attempt) -> None:
-        if attempt <= 1:
+    def _retry_refresh_token(self, retry_state) -> None:
+        if retry_state.attempt_number <= 1:
             return
 
         self.oauth.refresh_token()
@@ -71,9 +71,13 @@ class Allegro:
                 return self._cat_api.get_categories_using_get(**kwargs)
 
         """
+
+        def retry_refresh_token(retry_state: tenacity.RetryCallState):
+            self._retry_refresh_token(retry_state)
+
         return tenacity.retry(
             retry=AllegroAuth.token_needs_refresh,
-            before=self._retry_refresh_token,
+            before=retry_refresh_token,
             stop=tenacity.stop_after_attempt(2)
         )(fn)
 
