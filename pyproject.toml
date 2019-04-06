@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "mattes-allegro-pl"
 version = "0.3.0"
-description = ""
+description = "Python client for Allegro.pl API"
 authors = ["Raphael Krupinski"]
 license = 'MIT'
 packages=[{include='allegro_pl', from='src'}]
