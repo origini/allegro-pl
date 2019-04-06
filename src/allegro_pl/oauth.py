@@ -109,7 +109,7 @@ class AllegroAuth:
             else:
                 raise x
         elif isinstance(x, requests.exceptions.ConnectionError):
-            return x.args[0] == 'Connection aborted.'
+            return x.args[0].args[0] == 'Connection aborted.'
         else:
             raise x
 
