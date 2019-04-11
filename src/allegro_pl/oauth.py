@@ -66,12 +66,26 @@ class PassTokenStore(TokenStore):
         pass
 
 
+class ClientCodeStore:
+    def __init__(self, client_id: str, client_secret: str):
+        self._client_id = client_id
+        self._client_secret = client_secret
+
+    @property
+    def client_id(self) -> str:
+        return self._client_id
+
+    @property
+    def client_secret(self) -> str:
+        return self.client_secret
+
+
 class AllegroAuth:
     """Handle acquiring and refreshing access_token"""
 
-    def __init__(self, client_id: str, client_secret: str, token_store: TokenStore):
-        self.client_id: str = client_id
-        self.client_secret: str = client_secret
+    def __init__(self, code_store: ClientCodeStore, token_store: TokenStore):
+        assert code_store is not None
+        self._cs = code_store
 
         assert token_store is not None
         self._token_store = token_store
@@ -112,6 +126,10 @@ class AllegroAuth:
         else:
             raise x
 
+    @property
+    def client_id(self):
+        return self._cs.client_id
+
     @abc.abstractmethod
     def fetch_token(self) -> None:
         logger.info('fetch token')
@@ -124,15 +142,15 @@ class AllegroAuth:
 class ClientCredentialsAuth(AllegroAuth):
     """Authenticate with Client credentials flow"""
 
-    def __init__(self, client_id, client_secret):
-        super().__init__(client_id, client_secret, PassTokenStore())
+    def __init__(self, code_store: ClientCodeStore):
+        super().__init__(code_store, PassTokenStore())
 
-        client = oauthlib.oauth2.BackendApplicationClient(self.client_id, access_token=self.token_store.access_token)
+        client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id, access_token=self.token_store.access_token)
 
         self.oauth = requests_oauthlib.OAuth2Session(client=client, token_updater=self._on_token_updated)
 
     def fetch_token(self):
-        token = self.oauth.fetch_token(URL_TOKEN, client_id=self.client_id, client_secret=self.client_secret)
+        token = self.oauth.fetch_token(URL_TOKEN, client_id=self._cs.client_id, client_secret=self._cs.client_secret)
         self._on_token_updated(token)
 
     def refresh_token(self):
