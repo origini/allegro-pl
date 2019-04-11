@@ -72,12 +72,9 @@ class Allegro:
 
         """
 
-        def retry_refresh_token(retry_state: tenacity.RetryCallState):
-            self._retry_refresh_token(retry_state)
-
         return tenacity.retry(
             retry=AllegroAuth.token_needs_refresh,
-            before=retry_refresh_token,
+            before=self._retry_refresh_token,
             stop=tenacity.stop_after_attempt(2)
         )(fn)
 
