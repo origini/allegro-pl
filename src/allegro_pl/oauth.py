@@ -1,5 +1,4 @@
 import abc
-import concurrent.futures
 import json
 import logging
 import typing
@@ -22,7 +21,7 @@ class TokenStore(abc.ABC):
         self._refresh_token: typing.Optional[str] = None
 
     @abc.abstractmethod
-    def save(self):
+    def save(self) -> None:
         logger.debug('save tokens')
 
     @property
@@ -51,7 +50,7 @@ class TokenStore(abc.ABC):
         self.access_token = data.get('access_token')
         self.refresh_token = data.get('refresh_token')
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         d = {}
         if self._access_token:
             d['access_token'] = self.access_token
@@ -63,7 +62,7 @@ class TokenStore(abc.ABC):
 class PassTokenStore(TokenStore):
     """In-memory Token store implementation"""
 
-    def save(self):
+    def save(self) -> None:
         pass
 
 
@@ -79,7 +78,7 @@ class AllegroAuth:
 
         self._notify_token_updated: typing.Callable[[], None] = self._on_token_updated_pass
 
-    def _on_token_updated(self, token):
+    def _on_token_updated(self, token) -> None:
         logger.debug('token updated')
         self._token_store.update_from_dict(token)
         self._token_store.save()
@@ -114,11 +113,11 @@ class AllegroAuth:
             raise x
 
     @abc.abstractmethod
-    def fetch_token(self):
+    def fetch_token(self) -> None:
         logger.info('fetch token')
 
     @abc.abstractmethod
-    def refresh_token(self):
+    def refresh_token(self) -> None:
         logger.info('refresh token')
 
 
@@ -137,4 +136,4 @@ class ClientCredentialsAuth(AllegroAuth):
         self._on_token_updated(token)
 
     def refresh_token(self):
-        return self.fetch_token()
+        self.fetch_token()
