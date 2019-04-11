@@ -77,7 +77,7 @@ class ClientCodeStore:
 
     @property
     def client_secret(self) -> str:
-        return self.client_secret
+        return self._client_secret
 
 
 class AllegroAuth:
