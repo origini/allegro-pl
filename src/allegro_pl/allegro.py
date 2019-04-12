@@ -18,13 +18,6 @@ class Allegro:
         self.oauth = auth_handler
         self.oauth.set_token_update_handler(self._on_token_updated)
 
-        ts = self.oauth.token_store
-        if not ts.access_token:
-            if ts.refresh_token:
-                self.oauth.refresh_token()
-            else:
-                self.oauth.fetch_token()
-
         self._init_rest_client()
         self._init_webapi_client()
 
@@ -38,7 +31,6 @@ class Allegro:
 
     def _init_webapi_client(self):
         self._webapi_client = zeep.client.Client('https://webapi.allegro.pl/service.php?wsdl')
-        self._webapi_client_login()
 
     def _on_token_updated(self):
         ts = self.oauth.token_store

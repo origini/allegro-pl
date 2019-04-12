@@ -123,6 +123,8 @@ class AllegroAuth:
                 raise x
         elif isinstance(x, requests.exceptions.ConnectionError):
             return x.args[0].args[0] == 'Connection aborted.'
+        elif isinstance(x, zeep.exceptions.ValidationError):
+            return x.message == 'Missing element sessionHandle'
         else:
             raise x
 
