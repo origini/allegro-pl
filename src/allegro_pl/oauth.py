@@ -2,7 +2,6 @@ import abc
 import json
 import logging
 import typing
-from dataclasses import dataclass
 
 import allegro_api.rest
 import oauthlib.oauth2
@@ -19,15 +18,14 @@ URL_AUTHORIZE = 'https://allegro.pl/auth/oauth/authorize'
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class TokenStore(abc.ABC):
-    def __init__(self):
-        self._access_token: typing.Optional[str] = None
-        self._refresh_token: typing.Optional[str] = None
+    def __init__(self, access_token: str = None, refresh_token: str = None):
+        self._access_token: access_token
+        self._refresh_token: refresh_token
 
     @abc.abstractmethod
     def save(self) -> None:
-        logger.debug('save tokens')
+        logger.debug('Save tokens')
 
     @property
     def access_token(self) -> str:
@@ -52,15 +50,15 @@ class TokenStore(abc.ABC):
         return ts
 
     def update_from_dict(self, data: dict) -> None:
-        self.access_token = data.get('access_token')
-        self.refresh_token = data.get('refresh_token')
+        self.access_token = data.get(_ACCESS_TOKEN)
+        self.refresh_token = data.get(_REFRESH_TOKEN)
 
     def to_dict(self) -> dict:
         d = {}
         if self._access_token:
-            d['access_token'] = self.access_token
+            d[_ACCESS_TOKEN] = self.access_token
         if self._refresh_token:
-            d['refresh_token'] = self.refresh_token
+            d[_REFRESH_TOKEN] = self.refresh_token
         return d
 
 
@@ -98,7 +96,7 @@ class AllegroAuth:
         self._notify_token_updated: typing.Callable[[], None] = self._on_token_updated_pass
 
     def _on_token_updated(self, token) -> None:
-        logger.debug('token updated')
+        logger.debug('Token updated')
         self._token_store.update_from_dict(token)
         self._token_store.save()
         self._notify_token_updated()
@@ -139,11 +137,11 @@ class AllegroAuth:
 
     @abc.abstractmethod
     def fetch_token(self) -> None:
-        logger.info('fetch token')
+        logger.info('Fetch token')
 
     @abc.abstractmethod
     def refresh_token(self) -> None:
-        logger.info('refresh token')
+        logger.info('Refresh token')
 
 
 class ClientCredentialsAuth(AllegroAuth):
@@ -152,15 +150,18 @@ class ClientCredentialsAuth(AllegroAuth):
     def __init__(self, code_store: ClientCodeStore):
         super().__init__(code_store, PassTokenStore())
 
-        client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id, access_token=self.token_store.access_token)
+        client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id,
+                                                          access_token=self.token_store.access_token)
 
         self.oauth = requests_oauthlib.OAuth2Session(client=client, token_updater=self._on_token_updated)
 
     def fetch_token(self):
+        super().fetch_token()
         token = self.oauth.fetch_token(URL_TOKEN, client_id=self._cs.client_id, client_secret=self._cs.client_secret)
         self._on_token_updated(token)
 
     def refresh_token(self):
+        super().refresh_token()
         self.fetch_token()
 
 
