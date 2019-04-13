@@ -10,7 +10,12 @@ import requests.exceptions
 import requests_oauthlib
 import zeep.exceptions
 
+_ACCESS_TOKEN = 'access_token'
+_REFRESH_TOKEN = 'refresh_token'
+
 URL_TOKEN = 'https://allegro.pl/auth/oauth/token'
+URL_AUTHORIZE = 'https://allegro.pl/auth/oauth/authorize'
+
 logger = logging.getLogger(__name__)
 
 
@@ -157,3 +162,39 @@ class ClientCredentialsAuth(AllegroAuth):
 
     def refresh_token(self):
         self.fetch_token()
+
+
+class AuthorizationCodeAuth(AllegroAuth):
+    def __init__(self, cs: ClientCodeStore, ts: TokenStore, redirect_uri: str):
+        super().__init__(cs, ts)
+        client = oauthlib.oauth2.WebApplicationClient(self._cs.client_id, access_token=self._token_store.access_token)
+
+        self._oauth = requests_oauthlib.OAuth2Session(self._cs.client_id, client, URL_TOKEN, redirect_uri=redirect_uri,
+                                                      token_updater=self._token_store.access_token)
+
+    def refresh_token(self):
+        super().refresh_token()
+        from requests.auth import HTTPBasicAuth
+        try:
+            # OAuth2 takes data in the body, but allegro expects it in the query
+            url = mkurl(URL_TOKEN,
+                        {'grant_type': _REFRESH_TOKEN,
+                         'refresh_token': self.token_store.refresh_token,
+                         'redirect_uri': self._oauth.redirect_uri
+                         })
+            token = self._oauth.refresh_token(url, auth=HTTPBasicAuth(self._cs.client_id,
+                                                                      self._cs.client_secret))
+            self._on_token_updated(token)
+        except oauthlib.oauth2.rfc6749.errors.OAuth2Error as x:
+            logger.warning('Refresh token failed %s', x.error)
+            if x.description == 'Full authentication is required to access this resource' \
+                    or x.description.startswith('Invalid refresh token: ') \
+                    or x.error == 'invalid_token':
+                self.fetch_token()
+            else:
+                raise
+
+
+def mkurl(address, query):
+    from urllib.parse import urlencode
+    return address + '?' + urlencode(query)
