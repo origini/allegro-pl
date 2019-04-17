@@ -7,6 +7,7 @@ import allegro_api.rest
 import oauthlib.oauth2
 import requests.exceptions
 import requests_oauthlib
+import tenacity
 import zeep.exceptions
 
 _ACCESS_TOKEN = 'access_token'
@@ -112,24 +113,25 @@ class AllegroAuth:
         return self._token_store
 
     @staticmethod
-    def token_needs_refresh(retry_state) -> bool:
+    def token_needs_refresh(retry_state: tenacity.RetryCallState) -> bool:
         x = retry_state.outcome.exception(0)
         if x is None:
             return False
         if isinstance(x, allegro_api.rest.ApiException) and x.status == 401:
             body = json.loads(x.body)
+            logger.warning(body['error'])
             return body['error'] == 'invalid_token' and body['error_description'].startswith('Access token expired: ')
         elif isinstance(x, zeep.exceptions.Fault):
-            if x.code == 'ERR_INVALID_ACCESS_TOKEN':
-                return True
-            else:
-                raise x
+            logger.warning(x.code, x.message)
+            return x.code == 'ERR_INVALID_ACCESS_TOKEN'
         elif isinstance(x, requests.exceptions.ConnectionError):
+            logger.warning(x.args[0].args[0])
             return x.args[0].args[0] == 'Connection aborted.'
         elif isinstance(x, zeep.exceptions.ValidationError):
+            logger.warning(x.message)
             return x.message == 'Missing element sessionHandle'
         else:
-            raise x
+            return False
 
     @property
     def client_id(self):
