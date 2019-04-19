@@ -19,14 +19,13 @@ URL_AUTHORIZE = 'https://allegro.pl/auth/oauth/authorize'
 logger = logging.getLogger(__name__)
 
 
-class TokenStore(abc.ABC):
+class TokenStore:
     def __init__(self, access_token: str = None, refresh_token: str = None):
-        self._access_token: access_token
-        self._refresh_token: refresh_token
+        self._access_token = access_token
+        self._refresh_token = refresh_token
 
-    @abc.abstractmethod
     def save(self) -> None:
-        logger.debug('Save tokens')
+        logger.info('Not saving tokens')
 
     @property
     def access_token(self) -> str:
@@ -46,6 +45,8 @@ class TokenStore(abc.ABC):
 
     @classmethod
     def from_dict(cls: typing.Type['TokenStore'], data: dict) -> 'TokenStore':
+        if data is None:
+            raise ValueError('None')
         ts = cls()
         ts.update_from_dict(data)
         return ts
@@ -63,13 +64,6 @@ class TokenStore(abc.ABC):
         return d
 
 
-class PassTokenStore(TokenStore):
-    """In-memory Token store implementation"""
-
-    def save(self) -> None:
-        pass
-
-
 class ClientCodeStore:
     def __init__(self, client_id: str, client_secret: str):
         self._client_id = client_id
@@ -84,7 +78,7 @@ class ClientCodeStore:
         return self._client_secret
 
 
-class AllegroAuth:
+class AllegroAuth(abc.ABC):
     """Handle acquiring and refreshing access_token"""
 
     def __init__(self, code_store: ClientCodeStore, token_store: TokenStore):
@@ -94,19 +88,16 @@ class AllegroAuth:
         assert token_store is not None
         self._token_store = token_store
 
-        self._notify_token_updated: typing.Callable[[], None] = self._on_token_updated_pass
-
     def _on_token_updated(self, token) -> None:
         logger.debug('Token updated')
         self._token_store.update_from_dict(token)
         self._token_store.save()
-        self._notify_token_updated()
+        if self.notify_token_updated:
+            self.notify_token_updated()
 
-    def _on_token_updated_pass(self):
+    def notify_token_updated(self) -> None:
+        """Update this attribute to be notified of new token"""
         pass
-
-    def set_token_update_handler(self, f: typing.Callable[[], None]) -> None:
-        self._notify_token_updated = f
 
     @property
     def token_store(self) -> TokenStore:
@@ -122,14 +113,14 @@ class AllegroAuth:
             logger.warning(body['error'])
             return body['error'] == 'invalid_token' and body['error_description'].startswith('Access token expired: ')
         elif isinstance(x, zeep.exceptions.Fault):
-            logger.warning(x.code, x.message)
-            return x.code == 'ERR_INVALID_ACCESS_TOKEN'
+            logger.warning("%s - %s", x.code, x.message)
+            return x.code == 'ERR_INVALID_ACCESS_TOKEN' or x.code == 'ERR_NO_SESSION'
+        elif isinstance(x, zeep.exceptions.ValidationError):
+            logger.warning("%s %s", x.message, x.path)
+            return x.message == 'Missing element sessionHandle'
         elif isinstance(x, requests.exceptions.ConnectionError):
             logger.warning(x.args[0].args[0])
             return x.args[0].args[0] == 'Connection aborted.'
-        elif isinstance(x, zeep.exceptions.ValidationError):
-            logger.warning(x.message)
-            return x.message == 'Missing element sessionHandle'
         else:
             return False
 
@@ -139,18 +130,18 @@ class AllegroAuth:
 
     @abc.abstractmethod
     def fetch_token(self) -> None:
-        logger.info('Fetch token')
+        pass
 
     @abc.abstractmethod
     def refresh_token(self) -> None:
-        logger.info('Refresh token')
+        pass
 
 
 class ClientCredentialsAuth(AllegroAuth):
     """Authenticate with Client credentials flow"""
 
     def __init__(self, code_store: ClientCodeStore):
-        super().__init__(code_store, PassTokenStore())
+        super().__init__(code_store, TokenStore())
 
         client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id,
                                                           access_token=self.token_store.access_token)
@@ -158,13 +149,17 @@ class ClientCredentialsAuth(AllegroAuth):
         self.oauth = requests_oauthlib.OAuth2Session(client=client, token_updater=self._on_token_updated)
 
     def fetch_token(self):
-        super().fetch_token()
+        logger.debug('Fetch token')
         token = self.oauth.fetch_token(URL_TOKEN, client_id=self._cs.client_id, client_secret=self._cs.client_secret)
         self._on_token_updated(token)
 
     def refresh_token(self):
-        super().refresh_token()
+        logger.debug('refresh_token called...')
         self.fetch_token()
+
+
+class TokenError(Exception):
+    pass
 
 
 class AuthorizationCodeAuth(AllegroAuth):
@@ -176,7 +171,7 @@ class AuthorizationCodeAuth(AllegroAuth):
                                                       token_updater=self._token_store.access_token)
 
     def refresh_token(self):
-        super().refresh_token()
+        logger.info('Refresh token')
         from requests.auth import HTTPBasicAuth
         try:
             # OAuth2 takes data in the body, but allegro expects it in the query
@@ -189,15 +184,32 @@ class AuthorizationCodeAuth(AllegroAuth):
                                                                       self._cs.client_secret))
             self._on_token_updated(token)
         except oauthlib.oauth2.rfc6749.errors.OAuth2Error as x:
-            logger.warning('Refresh token failed %s', x.error)
-            if x.description == 'Full authentication is required to access this resource' \
-                    or x.description.startswith('Invalid refresh token: ') \
-                    or x.error == 'invalid_token':
-                self.fetch_token()
+            if x.description.startswith('Invalid refresh token: '):
+                error_description = 'Invalid refresh token'
             else:
-                raise
+                error_description = x.description
+
+            logger.warning('Refresh token failed: "%s" %s', x.error, error_description)
+
+            if x.description != 'Full authentication is required to access this resource' \
+                    and not x.description.startswith('Invalid refresh token: ') \
+                    and x.error != 'invalid_token':
+                raise TokenError('Refresh token Failed', x.error) from x
+
+            try:
+                self.fetch_token()
+            except TokenError as e:
+                # Hide potentially sensitive data
+                raise e from None
+            except Exception as tx:
+                # Hide potentially sensitive data
+                logger.warning("Error fetching token %s", type(tx))
+                raise TokenError('Error fetching token') from None
 
 
 def mkurl(address, query):
     from urllib.parse import urlencode
-    return address + '?' + urlencode(query)
+    result = [address]
+    if query is not None and len(query):
+        result.append(urlencode(query, True))
+    return '?'.join(result)

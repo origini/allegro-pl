@@ -17,7 +17,7 @@ class Allegro:
         self._webapi_session_handle: typing.Optional[str] = None
 
         self._auth = auth_handler
-        self._auth.set_token_update_handler(self._on_token_updated)
+        self._auth.notify_token_updated = self._on_token_updated
 
         self._init_rest_client()
         self._init_webapi_client()

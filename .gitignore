@@ -3,3 +3,4 @@ mattes_allegro_pl.egg-info/
 /pip-wheel-metadata/
 /.idea/
 /.pytest_cache/
+/.coverage
