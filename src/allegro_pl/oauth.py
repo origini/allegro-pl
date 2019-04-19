@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 class TokenStore:
     def __init__(self, access_token: str = None, refresh_token: str = None):
-        self._access_token: access_token
-        self._refresh_token: refresh_token
+        self._access_token = access_token
+        self._refresh_token = refresh_token
 
     def save(self) -> None:
         logger.info('Not saving tokens')
@@ -45,6 +45,8 @@ class TokenStore:
 
     @classmethod
     def from_dict(cls: typing.Type['TokenStore'], data: dict) -> 'TokenStore':
+        if data is None:
+            raise ValueError('None')
         ts = cls()
         ts.update_from_dict(data)
         return ts
