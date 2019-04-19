@@ -209,4 +209,7 @@ class AuthorizationCodeAuth(AllegroAuth):
 
 def mkurl(address, query):
     from urllib.parse import urlencode
-    return address + '?' + urlencode(query)
+    result = [address]
+    if query is not None and len(query):
+        result.append(urlencode(query, True))
+    return '?'.join(result)
