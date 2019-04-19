@@ -94,19 +94,16 @@ class AllegroAuth:
         assert token_store is not None
         self._token_store = token_store
 
-        self._notify_token_updated: typing.Callable[[], None] = self._on_token_updated_pass
-
     def _on_token_updated(self, token) -> None:
         logger.debug('Token updated')
         self._token_store.update_from_dict(token)
         self._token_store.save()
-        self._notify_token_updated()
+        if self.notify_token_updated:
+            self.notify_token_updated()
 
-    def _on_token_updated_pass(self):
+    def notify_token_updated(self) -> None:
+        """Update this attribute to be notified of new token"""
         pass
-
-    def set_token_update_handler(self, f: typing.Callable[[], None]) -> None:
-        self._notify_token_updated = f
 
     @property
     def token_store(self) -> TokenStore:
