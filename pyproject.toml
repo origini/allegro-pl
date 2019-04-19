@@ -15,6 +15,7 @@ tenacity = "^5.0.4"
 zeep = "^3.3"
 
 [tool.poetry.dev-dependencies]
+codecov = "^2.0"
 pytest = "^3.0"
 pytest-cov = "^2.6"
 
