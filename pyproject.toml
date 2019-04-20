@@ -5,6 +5,8 @@ description = "Python client for Allegro.pl API"
 authors = ["Raphael Krupinski"]
 license = 'MIT'
 packages=[{include='allegro_pl', from='src'}]
+readme = 'README.rst'
+repository = 'https://github.com/mattesilver/allegro-pl/'
 
 [tool.poetry.dependencies]
 python = "^3.7"
