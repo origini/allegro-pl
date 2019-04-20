@@ -138,10 +138,15 @@ class AllegroAuth(abc.ABC):
 
 
 class ClientCredentialsAuth(AllegroAuth):
-    """Authenticate with Client credentials flow"""
+    """Authenticate with Client credentials flow.
 
-    def __init__(self, code_store: ClientCodeStore):
-        super().__init__(code_store, TokenStore())
+    The token will expire after 12hrs and the flow doesn't accept re-login."""
+
+    def __init__(self, cs: ClientCodeStore, ts: TokenStore = None):
+        if ts is None:
+            ts = TokenStore()
+
+        super().__init__(cs, ts)
 
         client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id,
                                                           access_token=self.token_store.access_token)
