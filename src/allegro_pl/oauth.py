@@ -189,7 +189,7 @@ class AuthorizationCodeAuth(AllegroAuth):
             else:
                 error_description = x.description
 
-            logger.warning('Refresh token failed: "%s" %s', x.error, error_description)
+            logger.warning('Refresh token failed: %s "%s" %s', type(x), x.error, error_description)
 
             if x.description != 'Full authentication is required to access this resource' \
                     and not x.description.startswith('Invalid refresh token: ') \
