@@ -3,4 +3,4 @@ from .oauth import AllegroAuth, AuthorizationCodeAuth, ClientCodeStore, ClientCr
     URL_AUTHORIZE, URL_TOKEN
 
 __name__ = 'mattes-allegro-pl'
-__version__ = '0.6.0'
+__version__ = '0.6.1'
