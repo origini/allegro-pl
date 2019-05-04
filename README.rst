@@ -24,14 +24,13 @@ Usage:
     auth = ClientCredentialsAuth(cs, ts)
     allegro = allegro_pl.Allegro(auth)
 
-    rest_client = allegro.rest_api_client()
-    soap_client = allegro.webapi_client()
+    rest_service = allegro.rest_service()
 
-    cat_service = allegro_api.api.CategoriesAndParametersApi(rest_client)
+    categories = rest_service.get_categories(cat_id)
 
-    # retry will authenticate the client in REST and SOAP services nad call the metod once again
-    @allegro.retry
-    def get_categories(**kwargs):
-        return cat_service.get_categories_using_get(**kwargs)
+    # access to soap service
+    soap_service = allegro.soap_service()
 
-    categories = get_categories(...)
+    # direct access to rest and soap clients:
+    rest_service = allegro.rest_client()
+    soap_client = allegro.soap_client()
