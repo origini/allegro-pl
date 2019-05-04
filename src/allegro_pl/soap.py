@@ -109,7 +109,7 @@ def _wrap_methods(obj: AllegroSoapService, decorator, login_decorator) -> None:
 
 
 def _token_needs_refresh(retry_state: tenacity.RetryCallState) -> bool:
-    x = retry_state.outcome.exception(0)
+    x = retry_state.outcome.exception()
     if x is None:
         return False
     elif isinstance(x, zeep.exceptions.Fault):
