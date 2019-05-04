@@ -1,5 +1,10 @@
-from allegro_pl import __version__
+import allegro_pl
+import toml
 
 
 def test_version():
-    assert __version__ == '0.6.1'
+    def get_project_version(self):
+        return toml.load('pyproject.toml')['tool']['poetry']['version']
+
+    def test_version_matches(self):
+        self.assertEqual(self.get_project_version(), allegro_pl.__version__)

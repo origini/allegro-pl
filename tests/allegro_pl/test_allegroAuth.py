@@ -1,12 +1,7 @@
-import json
+import unittest.mock
 from unittest import TestCase
 
-import allegro_api.rest
-import requests
-import tenacity
-import zeep.exceptions
 from allegro_pl import AllegroAuth, ClientCodeStore, TokenStore
-import unittest.mock
 
 
 class MyAllegroAuth(AllegroAuth):
@@ -44,49 +39,6 @@ class TestAllegroAuth(TestCase):
         ts = TokenStore()
         under_test = MyAllegroAuth(ClientCodeStore('', ''), ts)
         self.assertEqual(ts, under_test.token_store)
-
-    def test_token_needs_refresh(self):
-        def retry_state(e) -> tenacity.RetryCallState:
-            state = tenacity.RetryCallState(None, None, [], {})
-            state.set_exception((type(e), e, None))
-            return state
-
-        def make_connection_error(message):
-            class MyCause:
-                pass
-
-            my_cause = MyCause
-            my_cause.args = [message]
-
-            return requests.exceptions.ConnectionError(my_cause)
-
-        under_test = MyAllegroAuth(ClientCodeStore('', ''), TokenStore())
-
-        exception = allegro_api.rest.ApiException(401)
-        exception.body = json.dumps({'error': 'invalid_token', 'error_description': 'Access token expired: '})
-        self.assertTrue(under_test.token_needs_refresh(retry_state(exception)))
-
-        exception = allegro_api.rest.ApiException(401)
-        exception.body = json.dumps({'error': 'other_problem', 'error_description': 'Access token expired: '})
-        self.assertFalse(under_test.token_needs_refresh(retry_state(exception)))
-
-        self.assertTrue(under_test.token_needs_refresh(
-            retry_state(zeep.exceptions.Fault('Some message', 'ERR_INVALID_ACCESS_TOKEN'))))
-
-        self.assertTrue(
-            under_test.token_needs_refresh(retry_state(zeep.exceptions.Fault('Some message', 'ERR_NO_SESSION'))))
-
-        self.assertFalse(
-            under_test.token_needs_refresh(retry_state(zeep.exceptions.Fault('Some message', 'OTHER_PROBLEM'))))
-
-        self.assertTrue(under_test.token_needs_refresh(
-            retry_state(zeep.exceptions.ValidationError(message='Missing element sessionHandle'))))
-
-        self.assertFalse(
-            under_test.token_needs_refresh(retry_state(zeep.exceptions.ValidationError(message='Other problem'))))
-
-        self.assertTrue(under_test.token_needs_refresh(retry_state(make_connection_error('Connection aborted.'))))
-        self.assertFalse(under_test.token_needs_refresh(retry_state(make_connection_error('Other problem.'))))
 
     def test_client_id(self):
         under_test = MyAllegroAuth(ClientCodeStore('client id', ''), TokenStore())

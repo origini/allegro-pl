@@ -1,14 +1,9 @@
 import abc
-import json
 import logging
 import typing
 
-import allegro_api.rest
 import oauthlib.oauth2
-import requests.exceptions
 import requests_oauthlib
-import tenacity
-import zeep.exceptions
 
 _ACCESS_TOKEN = 'access_token'
 _REFRESH_TOKEN = 'refresh_token'
@@ -95,6 +90,13 @@ class AllegroAuth(abc.ABC):
         if self.notify_token_updated:
             self.notify_token_updated()
 
+    def retry_refresh_token(self, retry_state) -> None:
+        if retry_state.attempt_number == 1:
+            if self.token_store.access_token is None:
+                self.fetch_token()
+        else:
+            self.refresh_token()
+
     def notify_token_updated(self) -> None:
         """Update this attribute to be notified of new token"""
         pass
@@ -102,27 +104,6 @@ class AllegroAuth(abc.ABC):
     @property
     def token_store(self) -> TokenStore:
         return self._token_store
-
-    @staticmethod
-    def token_needs_refresh(retry_state: tenacity.RetryCallState) -> bool:
-        x = retry_state.outcome.exception(0)
-        if x is None:
-            return False
-        if isinstance(x, allegro_api.rest.ApiException) and x.status == 401:
-            body = json.loads(x.body)
-            logger.warning(body['error'])
-            return body['error'] == 'invalid_token' and body['error_description'].startswith('Access token expired: ')
-        elif isinstance(x, zeep.exceptions.Fault):
-            logger.warning("%s - %s", x.code, x.message)
-            return x.code == 'ERR_INVALID_ACCESS_TOKEN' or x.code == 'ERR_NO_SESSION'
-        elif isinstance(x, zeep.exceptions.ValidationError):
-            logger.warning("%s %s", x.message, x.path)
-            return x.message == 'Missing element sessionHandle'
-        elif isinstance(x, requests.exceptions.ConnectionError):
-            logger.warning(x.args[0].args[0])
-            return x.args[0].args[0] == 'Connection aborted.'
-        else:
-            return False
 
     @property
     def client_id(self):
@@ -138,10 +119,15 @@ class AllegroAuth(abc.ABC):
 
 
 class ClientCredentialsAuth(AllegroAuth):
-    """Authenticate with Client credentials flow"""
+    """Authenticate with Client credentials flow.
 
-    def __init__(self, code_store: ClientCodeStore):
-        super().__init__(code_store, TokenStore())
+    The token will expire after 12hrs and the flow doesn't accept re-login."""
+
+    def __init__(self, cs: ClientCodeStore, ts: TokenStore = None):
+        if ts is None:
+            ts = TokenStore()
+
+        super().__init__(cs, ts)
 
         client = oauthlib.oauth2.BackendApplicationClient(self._cs.client_id,
                                                           access_token=self.token_store.access_token)
